@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, TextInput, Pressable, Alert, Image, ScrollView, Linking } from 'react-native';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { NavigationContainer } from '@react-navigation/native';
@@ -11,6 +11,7 @@ import * as SQLite from "expo-sqlite";
 SplashScreen.preventAutoHideAsync();
 setTimeout(SplashScreen.hideAsync, 2000);
 
+/*
 const titleKey = '@title:key'
 const minKey = '@min:key'
 const maxKey = '@max:key'
@@ -21,8 +22,27 @@ const jokerKey = '@joker:key'
 const ruleKey = '@rule:key'
 const webKey = '@web:key'
 const imageKey = '@image:key'
+*/
+
+function openDatabase() {
+  if (Platform.OS === "web") {
+    return {
+      transaction: () => {
+        return {
+          executeSql: () => { },
+        };
+      },
+    };
+  }
+
+  const db = SQLite.openDatabase("card.db");
+  return db;
+}
+
+const db = openDatabase();
 
 function CardData({ }) {
+  /*
   const [title, setTitle] = useState('');
   const [min, setMin] = useState('');
   const [max, setMax] = useState('');
@@ -35,6 +55,7 @@ function CardData({ }) {
   const [selectedImage, setSelectedImage] = useState(null);
 
   onLoad = async () => {
+    
     try {
       const title = await AsyncStorage.getItem(titleKey);
       setTitle(title);
@@ -66,8 +87,25 @@ function CardData({ }) {
       Alert.alert('Error', 'One or more items failed to load');
     }
   }
+  */
 
-  sendLink = () => {
+  const [cardDB, setCardDB] = useState([]);
+
+  useEffect(() => {
+    db.transaction((tx) => {
+      tx.executeSql(
+        'select id, title, min, max, scale, deck, hand, joker, rule, web, selectedImage from card order by title asc', [],
+        (_, { rows: { _array } }) => {
+          setCardDB(_array)
+        },
+        (_, error) => {
+          console.log("fetchHistory Error: ", error)
+        }
+      );
+    });
+  })
+
+  sendLink = (web) => {
     try {
       Linking.openURL(web);
     } catch (error) {
@@ -75,27 +113,30 @@ function CardData({ }) {
     }
   }
 
+  if (cardDB === null || cardDB.length === 0) {
+    return null;
+  }
+
   //Source found for Linking: https://stackoverflow.com/questions/30540252/how-does-one-display-a-hyperlink-in-react-native-app
   return (
     <ScrollView style={styles.container}>
-
-      <Text style={styles.cardTitle}>{title}</Text>
-      <View style={styles.cardBox}>
-        <Image source={selectedImage} style={styles.imageSmall} />
-        <View>
-          <Text style={styles.cardText}>Players: {min}{max != null && min != max ? ' to ' + max : ''}{scale == 'true' ? '+' : ''}</Text>
-          <Text style={styles.cardText}>Deck Size: {deck} Cards</Text>
-          <Text style={styles.cardText}>Hand Size: {hand} Cards</Text>
-          <Text style={styles.cardText}>Jokers: {joker > 0 ? joker : 'None'}</Text>
+      {cardDB.map(({ id, title, min, max, scale, deck, hand, joker, rule, web, selectedImage }) => (
+        <View key={id}>
+          <Text style={styles.cardTitle}>{title}</Text>
+          <View style={styles.cardBox}>
+            <Image source={selectedImage != 'default' ? { uri: selectedImage } : require('./assets/cardIcon.jpg')} style={styles.imageSmall} />
+            <View>
+              <Text style={styles.cardText}>Players: {min}{max != null && min != max ? ' to ' + max : ''}{scale == 'true' ? '+' : ''}</Text>
+              <Text style={styles.cardText}>Deck Size: {deck} Cards</Text>
+              <Text style={styles.cardText}>Hand Size: {hand} Cards</Text>
+              <Text style={styles.cardText}>Jokers: {joker > 0 ? joker : 'None'}</Text>
+            </View>
+          </View>
+          <Text style={styles.cardText}>Rules: </Text>
+          <TextInput value={rule} style={styles.cardText} multiline></TextInput>
+          <Text style={styles.link} onPress={() => this.sendLink(web)}>{web}</Text>
         </View>
-      </View>
-      <Text style={styles.cardText}>Rules: </Text>
-      <TextInput value={rule} style={styles.cardText} multiline></TextInput>
-      <Text style={styles.link} onPress={this.sendLink}>{web}</Text>
-
-      <Pressable style={styles.button} onPress={this.onLoad}>
-        <Text style={styles.buttonLabel}>Load</Text>
-      </Pressable>
+      ))}
     </ScrollView>
   )
 }
@@ -207,6 +248,16 @@ function AddCard({ }) {
   }
 
   onSave = async () => {
+    db.transaction((tx) => {
+      tx.executeSql(
+        "create table if not exists card (id integer primary key not null, title string, min int, max int, scale bool, deck int, hand int, joker int, rule string, web string, selectedImage string);",
+      );
+      tx.executeSql("insert into card (title, min, max, scale, deck, hand, joker, rule, web, selectedImage) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [title, min, max, scale, deck, hand, joker, rule, web, selectedImage])
+    });
+
+    alert("Save attempt completed");
+
+    /*
     try {
       await AsyncStorage.setItem(titleKey, title);
       await AsyncStorage.setItem(minKey, min);
@@ -222,6 +273,7 @@ function AddCard({ }) {
     } catch (error) {
       Alert.alert('Error', 'One or more items failed to save');
     }
+    */
   }
 
   return (
